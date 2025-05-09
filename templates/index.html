@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Pizza Delivery Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+</head>
+
+<body>
+    <div class="container">
+        <h1>🍕 Pizza Delivery Dashboard</h1>
+
+        <div id="stats-container">
+            <div class="stats">
+                <div class="stat-card">
+                    <h2>Orders in Queue</h2>
+                    <p id="orders-queue">{{ stats.orders_in_queue }}</p>
+                </div>
+                <div class="stat-card">
+                    <h2>Available Drivers</h2>
+                    <p id="available-drivers">{{ stats.available_drivers }}</p>
+                </div>
+                <div class="stat-card">
+                    <h2>Active Deliveries</h2>
+                    <p id="active-deliveries">{{ stats.in_progress_orders }}</p>
+                </div>
+                <div class="stat-card">
+                    <h2>Avg Delivery Time</h2>
+                    <p id="avg-time">{{ stats.average_delivery_time }}s</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="sections">
+            <section>
+                <h2>Recent Orders</h2>
+                <table id="orders-table">
+                    <thead>
+                        <tr>
+                            <th>Order ID</th>
+                            <th>Item</th>
+                            <th>Status</th>
+                            <th>Driver</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for order in stats.recent_orders %}
+                        <tr>
+                            <td>{{ order.id }}</td>
+                            <td>{{ order.item }}</td>
+                            <td>{{ order.status }}</td>
+                            <td>{{ order.driver }}</td>
+                            <td>
+                                {% if order.status == 'on_the_way' %}
+                                <button class="complete-btn" data-order-id="{{ order.id }}">Complete</button>
+                                {% elif order.status == 'delivered' %}
+                                Delivered
+                                {% else %}
+                                {{ order.status }}
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </section>
+
+            <section>
+                <h2>New Order</h2>
+                <form id="order-form">
+                    <input type="text" id="item" placeholder="Pizza Type" required>
+                    <input type="text" id="phone" placeholder="Phone Number" required>
+                    <button type="submit">Place Order</button>
+                </form>
+            </section>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+
+        document.addEventListener('click', function (e) {
+            if (e.target.classList.contains('complete-btn')) {
+                const orderId = e.target.dataset.orderId;
+                const button = e.target;
+                button.disabled = true;
+                button.textContent = 'Completing...';
+
+                fetch(`/complete_order/${orderId}`, {
+                    method: 'POST'
+                })
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Network response was not ok');
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        if (data.success) {
+                            button.textContent = 'Completed';
+                            // Update the status in the table
+                            const row = button.closest('tr');
+                            if (row) {
+                                const statusCell = row.querySelector('td:nth-child(3)');
+                                if (statusCell) statusCell.textContent = 'delivered';
+                            }
+                            // Refresh stats
+                            updateStats();
+                        } else {
+                            throw new Error(data.message || 'Unknown error');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        button.disabled = false;
+                        button.textContent = 'Complete';
+                        alert(`Failed to complete order: ${error.message}`);
+                    });
+            }
+        });
+
+        // Handle new order form
+        document.getElementById('order-form').addEventListener('submit', function (e) {
+            e.preventDefault();
+            const item = document.getElementById('item').value;
+            const phone = document.getElementById('phone').value;
+
+            fetch('/place_order', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    item: item,
+                    phone: phone
+                })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Order placed successfully!');
+                        document.getElementById('order-form').reset();
+                        // Refresh the stats
+                        updateStats();
+                    } else {
+                        alert('Error placing order: ' + data.message);
+                    }
+                });
+        });
+
+        // Update stats periodically
+        function updateStats() {
+            fetch('/')
+                .then(response => response.text())
+                .then(html => {
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(html, 'text/html');
+                    document.getElementById('stats-container').innerHTML =
+                        doc.getElementById('stats-container').innerHTML;
+                });
+        }
+
+        // Update stats every 5 seconds
+        setInterval(updateStats, 5000);
+
+        // Socket.io updates
+        socket.on('order_update', function (data) {
+            console.log('Update received:', data);
+            updateStats(); // Refresh the entire stats display
+        });
+    </script>
+</body>
+
+</html>
