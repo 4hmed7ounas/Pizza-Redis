@@ -29,7 +29,7 @@ See `requirements.txt` for full list. Main packages:
 
 2. **Clone this repository**
    ```bash
-   git clone [<your-repo-url>](https://github.com/4hmed7ounas/Pizza-Redis.git)
+   git clone (https://github.com/4hmed7ounas/Pizza-Redis.git)
    cd Pizza-Redis
    ```
 
